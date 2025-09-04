@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "name": "VARIOS/MECANICA",
+    "description": "",
+    "type": "common",
+    "color": "#2563EB"
+  },
+  {
+    "id": 2,
+    "name": "BATERIA",
+    "description": "",
+    "type": "common",
+    "color": "#65A30D"
+  }
+]

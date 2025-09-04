@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "name": "EXTRACTOR POLEA 40-210MM",
+    "type": "common",
+    "category_id": 1,
+    "location": "CAIXA 50",
+    "status": "available",
+    "total_quantity": 1,
+    "available_quantity": 1,
+    "in_use_quantity": 0,
+    "description": ""
+  },
+  {
+    "id": 2,
+    "name": "CAIXA BX3 - HILTI PISTOLA DE CLAVOS",
+    "type": "common",
+    "category_id": 2,
+    "location": "CAIXA 44",
+    "status": "available",
+    "total_quantity": 1,
+    "available_quantity": 1,
+    "in_use_quantity": 0,
+    "description": ""
+  }
+]
