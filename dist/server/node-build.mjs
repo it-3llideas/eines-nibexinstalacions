@@ -193,6 +193,7 @@ const getAllTools = async (req, res) => {
       FROM tools_inventory
       ORDER BY name ASC
     `);
+    res.set({ "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache", "Expires": "0" });
     res.json({
       success: true,
       tools: tools2
@@ -221,6 +222,7 @@ const getAvailableTools = async (req, res) => {
       WHERE available_quantity > 0
       ORDER BY category_id, name ASC
     `);
+    res.set({ "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache", "Expires": "0" });
     res.json({
       success: true,
       tools: tools2
@@ -416,6 +418,7 @@ const getInventoryStats = async (req, res) => {
       lowStockTools: lowStockTools[0].count,
       activeOperarios: activeOperarios[0].count
     };
+    res.set({ "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache", "Expires": "0" });
     res.json(stats);
   } catch (error) {
     console.error("Error fetching inventory stats:", error);
@@ -467,6 +470,7 @@ const getRecentTransactions = async (req, res) => {
       project: t.project,
       stockChange: `${t.previous_available} → ${t.new_available}`
     }));
+    res.set({ "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache", "Expires": "0" });
     res.json(formattedTransactions);
   } catch (error) {
     console.error("Error fetching recent transactions:", error);
@@ -550,11 +554,6 @@ const updateTool = async (req, res) => {
 const deleteTool = async (req, res) => {
   try {
     const { id } = req.params;
-    const [transactions] = await connection.execute(
-      "SELECT COUNT(*) as count FROM tool_transactions WHERE tool_id = ?",
-      [id]
-    );
-    const transactionCount = transactions[0].count;
     const [tool] = await connection.execute(
       "SELECT name, in_use_quantity FROM tools_inventory WHERE id = ?",
       [id]
@@ -568,22 +567,12 @@ const deleteTool = async (req, res) => {
         error: "No se puede eliminar una herramienta que está en uso"
       });
     }
-    if (transactionCount > 0) {
-      await connection.execute(
-        'UPDATE tools_inventory SET total_quantity = 0, available_quantity = 0, notes = CONCAT(COALESCE(notes, ""), " [ELIMINADA]"), updated_at = NOW() WHERE id = ?',
-        [id]
-      );
-      res.json({
-        success: true,
-        message: `Herramienta ${toolData.name} marcada como eliminada (tiene historial de transacciones)`
-      });
-    } else {
-      await connection.execute("DELETE FROM tools_inventory WHERE id = ?", [id]);
-      res.json({
-        success: true,
-        message: `Herramienta ${toolData.name} eliminada exitosamente`
-      });
-    }
+    await connection.execute("DELETE FROM tool_transactions WHERE tool_id = ?", [id]);
+    await connection.execute("DELETE FROM tools_inventory WHERE id = ?", [id]);
+    res.json({
+      success: true,
+      message: `Herramienta ${toolData.name} y su historial fueron eliminados`
+    });
   } catch (error) {
     console.error("Error deleting tool:", error);
     res.status(500).json({

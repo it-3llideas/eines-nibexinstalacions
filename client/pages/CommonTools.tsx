@@ -68,7 +68,6 @@ export default function CommonTools() {
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Form states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -89,9 +88,20 @@ export default function CommonTools() {
     loadCategories();
   }, []);
 
+  // Auto-refresh on window focus and periodic refresh to reflect check-in/check-out changes
+  useEffect(() => {
+    const onFocus = () => loadTools();
+    window.addEventListener('focus', onFocus);
+    const id = setInterval(loadTools, 10000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(id);
+    };
+  }, []);
+
   useEffect(() => {
     filterTools();
-  }, [tools, searchTerm, selectedCategory, statusFilter]);
+  }, [tools, searchTerm, selectedCategory]);
 
   const loadTools = async () => {
     try {
@@ -135,36 +145,16 @@ export default function CommonTools() {
   const filterTools = () => {
     let filtered = [...tools];
 
-    // Search filter
     if (searchTerm) {
-      filtered = filtered.filter(tool => 
+      filtered = filtered.filter(tool =>
         tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tool.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tool.location.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    // Category filter
     if (selectedCategory !== 'all') {
       filtered = filtered.filter(tool => tool.category_id.toString() === selectedCategory);
-    }
-
-    // Status filter
-    if (statusFilter !== 'all') {
-      switch (statusFilter) {
-        case 'available':
-          filtered = filtered.filter(tool => tool.available_quantity > 0);
-          break;
-        case 'in_use':
-          filtered = filtered.filter(tool => tool.in_use_quantity > 0);
-          break;
-        case 'maintenance':
-          filtered = filtered.filter(tool => tool.maintenance_quantity > 0);
-          break;
-        case 'low_stock':
-          filtered = filtered.filter(tool => tool.total_quantity <= tool.minimum_stock);
-          break;
-      }
     }
 
     setFilteredTools(filtered);
@@ -492,17 +482,6 @@ export default function CommonTools() {
                 </SelectContent>
               </Select>
 
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos los estados" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los estados</SelectItem>
-                  <SelectItem value="available">Disponibles</SelectItem>
-                  <SelectItem value="in_use">En uso</SelectItem>
-                  <SelectItem value="maintenance">En mantenimiento</SelectItem>
-                </SelectContent>
-              </Select>
 
               <div className="text-sm text-gray-500 flex items-center">
                 Total: {filteredTools.length} herramientas
