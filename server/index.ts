@@ -20,7 +20,8 @@ import {
   updateTool,
   deleteTool,
   getInventoryStats,
-  getRecentTransactions
+  getRecentTransactions,
+  getTypeCounters
 } from "./routes/inventory";
 import { loginUser, getCurrentUser, logoutUser, createDefaultAdmin } from "./routes/auth";
 import {
@@ -31,7 +32,7 @@ import {
   deleteCategory,
   getCategoryStats
 } from "./routes/categories";
-import { checkAndCreateAdmin, getAllAdminUsers, testLogin } from "./routes/admin-setup";
+import { checkAndCreateAdmin, getAllAdminUsers, testLogin, ensureAdminHash } from "./routes/admin-setup";
 import { createUserInUsersTable, getAllUsersFromUsersTable } from "./routes/user-setup";
 import {
   getAllUsers,
@@ -47,9 +48,7 @@ import {
   regenerateCode
 } from "./routes/operarios-management";
 import { fixInventoryQuantities } from "./routes/fix-inventory";
-import { setupInventoryTables } from "./db/inventory-setup";
-import { resetDatabase } from "./db/reset";
-import { initializeDatabase } from "./db/init";
+import { setupDatabase } from "./routes/db-setup";
 
 export function createServer() {
   const app = express();
@@ -59,11 +58,7 @@ export function createServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Setup admin user on server start
-  fetch('http://localhost:8080/api/admin/setup')
-    .then(response => response.json())
-    .then(data => console.log('Admin setup result:', data.message))
-    .catch(error => console.log('Admin setup will be available via API'));
+  // Admin setup is now manual via /api/admin/setup endpoint when needed
 
   // Example API routes
   app.get("/api/ping", (_req, res) => {
@@ -90,6 +85,12 @@ export function createServer() {
   // Admin setup routes
   app.get("/api/admin/setup", checkAndCreateAdmin);
   app.post("/api/admin/test-login", testLogin);
+  app.post("/api/admin/ensure-admin-hash", ensureAdminHash);
+  app.get("/api/admin/ensure-admin-hash", ensureAdminHash);
+
+  // Database setup (no seeding)
+  app.post("/api/db/setup", setupDatabase);
+  app.get("/api/db/setup", setupDatabase);
 
   // Operarios management routes
   app.get("/api/operarios", getOperarios);
@@ -123,6 +124,7 @@ export function createServer() {
   app.delete("/api/inventory/tools/:id", deleteTool);
   app.get("/api/inventory/stats", getInventoryStats);
   app.get("/api/inventory/transactions", getRecentTransactions);
+  app.get("/api/inventory/type-counters", getTypeCounters);
 
   // Fix inventory quantities
   app.post("/api/inventory/fix/:toolId", fixInventoryQuantities);

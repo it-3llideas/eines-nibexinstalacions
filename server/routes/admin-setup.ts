@@ -1,10 +1,6 @@
 import { RequestHandler } from "express";
-import mysql from 'mysql2/promise';
-
-const connection = mysql.createPool({
-  uri: process.env.DATABASE_URL || 'mysql://nibex:nibex@212.83.137.117:3306/nibex',
-  ssl: false
-});
+import { connection } from '../db/config';
+import { encryptPassword, verifyPassword } from '../utils/password';
 
 export const checkAndCreateAdmin: RequestHandler = async (req, res) => {
   try {
@@ -37,7 +33,7 @@ export const checkAndCreateAdmin: RequestHandler = async (req, res) => {
 
     // Check if admin user exists
     const [existingAdmin] = await connection.execute(
-      'SELECT id, email, username FROM users WHERE email = ?',
+      'SELECT id, email, username, password_hash FROM users WHERE email = ?',
       ['admin@nibexinstalacions.com']
     );
 
@@ -45,10 +41,11 @@ export const checkAndCreateAdmin: RequestHandler = async (req, res) => {
       console.log('❌ Usuario administrador no existe. Creándolo...');
       
       // Create admin user
+      const hashedPassword = encryptPassword('C@t4luny4');
       await connection.execute(`
         INSERT INTO users (username, email, password_hash, active) VALUES
-        ('admin', 'admin@nibexinstalacions.com', 'C@t4luny4', TRUE)
-      `);
+        ('admin', 'admin@nibexinstalacions.com', ?, TRUE)
+      `, [hashedPassword]);
       
       console.log('✅ Usuario administrador creado');
       console.log('   Email: admin@nibexinstalacions.com');
@@ -66,7 +63,17 @@ export const checkAndCreateAdmin: RequestHandler = async (req, res) => {
     } else {
       console.log('✅ Usuario administrador ya existe');
       const admin = (existingAdmin as any[])[0];
-      
+
+      // Ensure password is encrypted (migrate if needed)
+      if (!admin.password_hash || admin.password_hash.length !== 64 || !/^[0-9a-f]+$/i.test(admin.password_hash)) {
+        const newHash = encryptPassword(String(admin.password_hash || 'C@t4luny4'));
+        await connection.execute(
+          'UPDATE users SET password_hash = ? WHERE id = ?',
+          [newHash, admin.id]
+        );
+        admin.password_hash = newHash;
+      }
+
       res.json({
         success: true,
         message: 'Usuario administrador ya existe',
@@ -105,6 +112,29 @@ export const getAllAdminUsers: RequestHandler = async (req, res) => {
       error: 'Error fetching admin users',
       details: error.message 
     });
+  }
+};
+
+export const ensureAdminHash: RequestHandler = async (_req, res) => {
+  try {
+    const [rows] = await connection.execute(
+      'SELECT id, email, password_hash FROM users WHERE email = ? LIMIT 1',
+      ['admin@nibexinstalacions.com']
+    );
+    if ((rows as any[]).length === 0) {
+      return res.status(404).json({ success: false, error: 'Admin no existe' });
+    }
+    const admin = (rows as any[])[0];
+    const looksHashed = typeof admin.password_hash === 'string' && /^[0-9a-f]{64}$/i.test(admin.password_hash);
+    if (!looksHashed) {
+      const newHash = encryptPassword('C@t4luny4');
+      await connection.execute('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, admin.id]);
+      return res.json({ success: true, updated: true });
+    }
+    return res.json({ success: true, updated: false });
+  } catch (e: any) {
+    console.error('ensureAdminHash error:', e);
+    return res.status(500).json({ success: false, error: e.message });
   }
 };
 

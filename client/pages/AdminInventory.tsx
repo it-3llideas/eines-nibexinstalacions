@@ -21,8 +21,7 @@ interface Tool {
   id: number;
   name: string;
   description: string;
-  category: 'individual' | 'common';
-  subcategory: string;
+  type: 'individual' | 'common';
   total_quantity: number;
   available_quantity: number;
   in_use_quantity: number;
@@ -35,10 +34,15 @@ interface Tool {
 
 interface Transaction {
   id: number;
-  type: string;
+  type: 'checkout' | 'checkin';
   tool: string;
   operario: string;
   operarioEmail: string;
+  location?: string | null;
+  categoryId?: number | null;
+  categoryName?: string | null;
+  categoryColor?: string | null;
+  categoryType?: 'individual' | 'common' | null;
   quantity: number;
   timestamp: string;
   project: string;
@@ -55,10 +59,30 @@ interface Stats {
   activeOperarios: number;
 }
 
+interface TypeCounters {
+  individual: { inUse: number; returned: number };
+  common: { inUse: number; returned: number };
+}
+
+interface Category {
+  id: number;
+  name: string;
+  type: 'individual' | 'common';
+  color: string;
+}
+
 export default function AdminInventory() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [typeCounters, setTypeCounters] = useState<TypeCounters | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [filters, setFilters] = useState({
+    categoryId: 'all' as string,
+    action: 'all' as string,
+    operario: 'all' as string,
+    location: 'all' as string
+  });
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [newTool, setNewTool] = useState({
@@ -81,7 +105,9 @@ export default function AdminInventory() {
       await Promise.all([
         loadTools(),
         loadStats(),
-        loadTransactions()
+        loadTransactions(),
+        loadTypeCounters(),
+        loadCategories()
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -94,11 +120,16 @@ export default function AdminInventory() {
     try {
       const response = await fetch('/api/inventory/tools');
       const data = await response.json();
-      if (Array.isArray(data)) {
+      if (data && Array.isArray(data.tools)) {
+        setTools(data.tools);
+      } else if (Array.isArray(data)) {
         setTools(data);
+      } else {
+        setTools([]);
       }
     } catch (error) {
       console.error('Error loading tools:', error);
+      setTools([]);
     }
   };
 
@@ -123,6 +154,32 @@ export default function AdminInventory() {
         activeOperarios: 0
       });
     }
+  };
+
+  const loadTypeCounters = async () => {
+    try {
+      const response = await fetch('/api/inventory/type-counters');
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.success && data.counters) {
+          setTypeCounters(data.counters);
+        } else {
+          setTypeCounters(null);
+        }
+      }
+    } catch (e) {
+      setTypeCounters(null);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setCategories(data);
+      }
+    } catch {}
   };
 
   const loadTransactions = async () => {
@@ -210,13 +267,13 @@ export default function AdminInventory() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-gray-900">
-                    {tools.filter(t => t.category === 'individual').reduce((sum, t) => sum + t.in_use_quantity, 0)}
+                    {typeCounters ? typeCounters.individual.inUse : tools.filter(t => t.type === 'individual').reduce((sum, t) => sum + t.in_use_quantity, 0)}
                   </div>
                   <div className="text-sm text-gray-600">En Uso</div>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-gray-900">
-                    {tools.filter(t => t.category === 'individual').reduce((sum, t) => sum + t.available_quantity, 0)}
+                    {typeCounters ? typeCounters.individual.returned : 0}
                   </div>
                   <div className="text-sm text-gray-600">Devueltas</div>
                 </div>
@@ -236,13 +293,13 @@ export default function AdminInventory() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-gray-900">
-                    {tools.filter(t => t.category === 'common').reduce((sum, t) => sum + t.in_use_quantity, 0)}
+                    {typeCounters ? typeCounters.common.inUse : tools.filter(t => t.type === 'common').reduce((sum, t) => sum + t.in_use_quantity, 0)}
                   </div>
                   <div className="text-sm text-gray-600">En Uso</div>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-gray-900">
-                    {tools.filter(t => t.category === 'common').reduce((sum, t) => sum + t.available_quantity, 0)}
+                    {typeCounters ? typeCounters.common.returned : 0}
                   </div>
                   <div className="text-sm text-gray-600">Devueltas</div>
                 </div>
@@ -336,6 +393,70 @@ export default function AdminInventory() {
           </Card>
         )}
 
+        {/* Filters */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Filtros
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-4">
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">Categoría</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={filters.categoryId}
+                  onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
+                >
+                  <option value="all">Todas</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={String(c.id)}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">Acción</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={filters.action}
+                  onChange={(e) => setFilters({ ...filters, action: e.target.value })}
+                >
+                  <option value="all">Todas</option>
+                  <option value="checkout">EN USO</option>
+                  <option value="checkin">DEVUELTO</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">Operario</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={filters.operario}
+                  onChange={(e) => setFilters({ ...filters, operario: e.target.value })}
+                >
+                  <option value="all">Todos</option>
+                  {Array.from(new Set(transactions.map(t => t.operario).filter(Boolean))).map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">Ubicación</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={filters.location}
+                  onChange={(e) => setFilters({ ...filters, location: e.target.value })}
+                >
+                  <option value="all">Todas</option>
+                  {Array.from(new Set(transactions.map(t => t.location || 'No especificada'))).map(loc => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Activity Log - Registro de Herramientas */}
         <Card>
           <CardHeader>
@@ -346,7 +467,13 @@ export default function AdminInventory() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {transactions.slice(0, 20).map((transaction) => {
+              {transactions
+                .filter(t => filters.categoryId === 'all' || String(t.categoryId) === filters.categoryId)
+                .filter(t => filters.action === 'all' || t.type === filters.action)
+                .filter(t => filters.operario === 'all' || t.operario === filters.operario)
+                .filter(t => filters.location === 'all' || (t.location || 'No especificada') === filters.location)
+                .slice(0, 20)
+                .map((transaction) => {
                 const formatDate = (timestamp: string) => {
                   try {
                     // Handle various timestamp formats
@@ -382,7 +509,7 @@ export default function AdminInventory() {
                 };
 
                 const { date, time } = formatDate(transaction.timestamp);
-                const isCheckout = transaction.action === 'checkout';
+                const isCheckout = transaction.type === 'checkout';
 
                 return (
                   <div key={transaction.id} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg">
@@ -397,16 +524,24 @@ export default function AdminInventory() {
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <p className="font-semibold text-slate-900">
-                              {transaction.tool_name}
+                              {transaction.tool}
                             </p>
                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                               isCheckout ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                             }`}>
-                              {isCheckout ? 'SALIDA' : 'ENTRADA'}
+                              {isCheckout ? 'EN USO' : 'DEVUELTO'}
                             </span>
+                            {transaction.categoryName && (
+                              <span
+                                className="px-2 py-1 text-xs font-medium rounded-full ml-2"
+                                style={{ backgroundColor: transaction.categoryColor || '#e5e7eb', color: '#fff' }}
+                              >
+                                {transaction.categoryName}
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-slate-600 mb-1">
-                            Operario: <span className="font-medium">{transaction.operario_name}</span>
+                            Operario: <span className="font-medium">{transaction.operario}</span>
                           </p>
                           <p className="text-xs text-slate-500">
                             Ubicación: {transaction.location || 'No especificada'}

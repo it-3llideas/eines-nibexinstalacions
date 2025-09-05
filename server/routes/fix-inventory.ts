@@ -1,11 +1,5 @@
 import { RequestHandler } from 'express';
-import mysql from 'mysql2/promise';
-
-// Database connection
-const connection = mysql.createPool({
-  uri: process.env.DATABASE_URL || 'mysql://nibex:nibex@212.83.137.117:3306/nibex',
-  ssl: false
-});
+import { connection } from '../db/config';
 
 // Fix inventory quantities based on transactions
 export const fixInventoryQuantities: RequestHandler = async (req, res) => {

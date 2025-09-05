@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  Clock, 
-  User, 
-  Package, 
+import { useEffect, useState } from "react";
+import {
+  Clock,
+  User,
+  Package,
   AlertTriangle,
   CheckCircle,
   XCircle
@@ -12,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 
 interface ActivityItem {
-  id: string;
+  id: string | number;
   type: 'checkout' | 'checkin' | 'maintenance' | 'review' | 'assignment';
   tool: string;
   operario: string;
@@ -21,6 +22,7 @@ interface ActivityItem {
   details?: string;
 }
 
+// Live data will be fetched from /api/inventory/transactions
 const activities: ActivityItem[] = [
   {
     id: '1',
@@ -113,6 +115,45 @@ const statusConfig = {
 };
 
 export default function RecentActivity() {
+  const [items, setItems] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchTransactions = async () => {
+      try {
+        const res = await fetch('/api/inventory/transactions');
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted && Array.isArray(data)) {
+            const mapped: ActivityItem[] = data.map((t: any) => ({
+              id: t.id,
+              type: t.type === 'checkout' || t.type === 'checkin' ? t.type : 'assignment',
+              tool: t.tool,
+              operario: t.operario,
+              timestamp: t.timestamp,
+              details: t.project ? `Proyecto: ${t.project} • Stock ${t.stockChange}` : `Stock ${t.stockChange}`,
+              status: 'success'
+            }));
+            setItems(mapped);
+          }
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    fetchTransactions();
+    const id = setInterval(fetchTransactions, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, []);
+
   return (
     <Card className="h-full">
       <CardHeader>
@@ -124,10 +165,15 @@ export default function RecentActivity() {
       <CardContent className="p-0">
         <ScrollArea className="h-96">
           <div className="space-y-4 p-6 pt-0">
-            {activities.map((activity) => {
+            {loading && items.length === 0 && (
+              <div className="text-sm text-slate-500">Cargando actividad...</div>
+            )}
+            {!loading && items.length === 0 && (
+              <div className="text-sm text-slate-500">Sin movimientos recientes</div>
+            )}
+            {items.map((activity) => {
               const config = typeConfig[activity.type];
               const Icon = config.icon;
-              
               return (
                 <div key={activity.id} className="flex items-start gap-3 pb-4 border-b border-slate-100 last:border-0">
                   <div className={cn(

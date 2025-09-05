@@ -1,10 +1,5 @@
 import { RequestHandler } from "express";
-import mysql from 'mysql2/promise';
-
-const connection = mysql.createPool({
-  uri: process.env.DATABASE_URL || 'mysql://nibex:nibex@212.83.137.117:3306/nibex',
-  ssl: false
-});
+import { connection } from '../db/config';
 
 // Get all tools with quantities
 export const getAllTools: RequestHandler = async (req, res) => {
@@ -329,10 +324,16 @@ export const getRecentTransactions: RequestHandler = async (req, res) => {
         tt.project,
         tt.created_at,
         ti.name as tool_name,
+        ti.location as tool_location,
+        ti.category_id as category_id,
+        tc.name as category_name,
+        tc.color as category_color,
+        tc.type as category_type,
         oi.name as operario_name,
         oi.email as operario_email
       FROM tool_transactions tt
       LEFT JOIN tools_inventory ti ON tt.tool_id = ti.id
+      LEFT JOIN tool_categories tc ON tc.id = ti.category_id
       LEFT JOIN operarios oi ON tt.operario_id = oi.id
       ORDER BY tt.created_at DESC
       LIMIT 20
@@ -344,6 +345,11 @@ export const getRecentTransactions: RequestHandler = async (req, res) => {
       tool: t.tool_name || 'Unknown Tool',
       operario: t.operario_name || 'Unknown Operario',
       operarioEmail: t.operario_email || 'Sin email',
+      location: t.tool_location || null,
+      categoryId: t.category_id || null,
+      categoryName: t.category_name || null,
+      categoryColor: t.category_color || null,
+      categoryType: t.category_type || null,
       quantity: t.quantity,
       timestamp: formatTimestamp(t.created_at),
       project: t.project,
@@ -357,6 +363,47 @@ export const getRecentTransactions: RequestHandler = async (req, res) => {
       error: 'Error al obtener transacciones',
       details: error.message 
     });
+  }
+};
+
+// Get counters by type (individual/common): in use now and cumulative returned
+export const getTypeCounters: RequestHandler = async (_req, res) => {
+  try {
+    const [inUseRows] = await connection.execute(
+      `SELECT type, COALESCE(SUM(in_use_quantity), 0) AS in_use
+       FROM tools_inventory
+       GROUP BY type`
+    );
+
+    const [returnedRows] = await connection.execute(
+      `SELECT ti.type AS type, COALESCE(SUM(tt.quantity), 0) AS returned
+       FROM tool_transactions tt
+       JOIN tools_inventory ti ON ti.id = tt.tool_id
+       WHERE tt.transaction_type = 'checkin'
+       GROUP BY ti.type`
+    );
+
+    const counters: Record<string, { inUse: number; returned: number }> = {
+      individual: { inUse: 0, returned: 0 },
+      common: { inUse: 0, returned: 0 }
+    };
+
+    (inUseRows as any[]).forEach((r: any) => {
+      if (r.type === 'individual' || r.type === 'common') {
+        counters[r.type].inUse = Number(r.in_use) || 0;
+      }
+    });
+
+    (returnedRows as any[]).forEach((r: any) => {
+      if (r.type === 'individual' || r.type === 'common') {
+        counters[r.type].returned = Number(r.returned) || 0;
+      }
+    });
+
+    res.json({ success: true, counters });
+  } catch (error: any) {
+    console.error('Error fetching type counters:', error);
+    res.status(500).json({ error: 'Error al obtener contadores por tipo', details: error.message });
   }
 };
 

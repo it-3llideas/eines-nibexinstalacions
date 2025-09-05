@@ -65,115 +65,11 @@ const connection = mysql.createPool({
   ssl: false
 });
 
-// In-memory storage for users (default data)
-let users = [
-  {
-    id: 1,
-    username: 'admin',
-    email: 'admin@nibexinstalacions.com',
-    active: true,
-    created_at: new Date().toISOString()
-  }
-];
-
-// In-memory storage for operarios
+// In-memory storage (no default data)
+let users = [];
 let operarios = [];
-
-// In-memory storage for categories (default data)
-let categories = [
-  {
-    id: 1,
-    name: 'Herramientas Eléctricas',
-    description: 'Taladros, amoladoras, sierras, etc.',
-    type: 'individual',
-    color: '#E2372B'
-  },
-  {
-    id: 2,
-    name: 'Herramientas Manuales',
-    description: 'Martillos, destornilladores, llaves, etc.',
-    type: 'common',
-    color: '#3B82F6'
-  },
-  {
-    id: 3,
-    name: 'Equipos de Medición',
-    description: 'Multímetros, nivel láser, etc.',
-    type: 'individual',
-    color: '#10B981'
-  },
-  {
-    id: 4,
-    name: 'Equipos de Seguridad',
-    description: 'Cascos, guantes, gafas, etc.',
-    type: 'common',
-    color: '#F59E0B'
-  }
-];
-
-// In-memory storage for tools (default data)
-let tools = [
-  {
-    id: 1,
-    name: 'Taladro Bosch GSB 13 RE',
-    description: 'Taladro percutor con cable, 600W',
-    category_id: 1,
-    type: 'individual',
-    location: 'Almacén A - Estante 1',
-    status: 'available',
-    total_quantity: 5,
-    available_quantity: 3,
-    in_use_quantity: 2
-  },
-  {
-    id: 2,
-    name: 'Amoladora Angular Makita',
-    description: 'Amoladora 125mm, 800W',
-    category_id: 1,
-    type: 'individual',
-    location: 'Almacén A - Estante 2',
-    status: 'available',
-    total_quantity: 3,
-    available_quantity: 2,
-    in_use_quantity: 1
-  },
-  {
-    id: 3,
-    name: 'Martillo 500g',
-    description: 'Martillo de carpintero con mango de madera',
-    category_id: 2,
-    type: 'common',
-    location: 'Almacén B - Caja 1',
-    status: 'available',
-    total_quantity: 10,
-    available_quantity: 8,
-    in_use_quantity: 2
-  },
-  {
-    id: 4,
-    name: 'Multímetro Digital',
-    description: 'Multímetro con pantalla LCD',
-    category_id: 3,
-    type: 'individual',
-    location: 'Almacén C - Estante 1',
-    status: 'available',
-    total_quantity: 4,
-    available_quantity: 3,
-    in_use_quantity: 1
-  },
-  {
-    id: 5,
-    name: 'Cascos de Seguridad',
-    description: 'Cascos blancos con ajuste',
-    category_id: 4,
-    type: 'common',
-    location: 'Almacén D - Percha 1',
-    status: 'available',
-    total_quantity: 20,
-    available_quantity: 15,
-    in_use_quantity: 5
-  }
-];
+let categories = [];
+let tools = [];
 
 // Load existing data on startup
 loadData();

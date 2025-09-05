@@ -321,20 +321,21 @@ export default function EntryExitPanel() {
 
   // Main interface
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen p-5 bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Back arrow in top right */}
-      <div className="absolute top-4 right-4 z-10">
+      <div className="fixed top-2 right-2 z-20">
         <Button
-          variant="outline"
+          variant="ghost"
           onClick={() => navigate('/login')}
-          className="border-gray-300 p-2"
-          size="sm"
+          className="bg-transparent hover:bg-transparent"
+          size="icon"
+          aria-label="Volver"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
       </div>
 
-      <div className="max-w-5xl mx-auto p-8">
+      <div className="w-full h-[calc(100vh-40px)] mx-auto p-5">
         {/* Error display */}
         {error && (
           <Alert variant="destructive" className="mb-6">
@@ -345,36 +346,36 @@ export default function EntryExitPanel() {
 
         {/* Step 1: Action Selection */}
         {currentStep === 'action' && (
-          <div className="space-y-6">
-            <Card>
+          <div className="h-full">
+            <Card className="h-full flex flex-col">
               <CardHeader className="text-center">
                 <CardTitle className="text-5xl">PANEL DE HERRAMIENTAS</CardTitle>
                 <CardDescription className="text-xl">Selecciona la acción que deseas realizar</CardDescription>
               </CardHeader>
-              <CardContent className="p-12">
-                <div className="grid md:grid-cols-2 gap-10">
-                  <Card 
-                    className="cursor-pointer transition-all duration-300 hover:shadow-lg border-2 hover:border-red-300 group"
+              <CardContent className="p-12 flex-1 flex items-stretch">
+                <div className="grid md:grid-cols-2 gap-10 w-full h-full items-stretch">
+                  <Card
+                    className="h-full min-h-[420px] cursor-pointer transition-all duration-300 hover:shadow-lg border-2 hover:border-red-300 group"
                     onClick={() => handleActionSelect('checkout')}
                   >
-                    <CardContent className="p-12 text-center">
-                      <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:bg-red-200 transition-colors">
-                        <PackageOpen className="h-12 w-12 text-red-600" />
+                    <CardContent className="p-12 h-full flex flex-col items-center justify-center text-center">
+                      <div className="w-28 h-28 md:w-32 md:h-32 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:bg-red-200 transition-colors">
+                        <PackageOpen className="h-14 w-14 md:h-16 md:w-16 text-red-600" />
                       </div>
-                      <h3 className="text-3xl font-bold text-gray-900 mb-4">Coger Herramienta</h3>
+                      <h3 className="text-3xl font-bold text-gray-900 mb-4">EN USO</h3>
                       <p className="text-xl text-gray-600">Asignar herramientas a un operario</p>
                     </CardContent>
                   </Card>
 
-                  <Card 
-                    className="cursor-pointer transition-all duration-300 hover:shadow-lg border-2 hover:border-green-300 group"
+                  <Card
+                    className="h-full min-h-[420px] cursor-pointer transition-all duration-300 hover:shadow-lg border-2 hover:border-green-300 group"
                     onClick={() => handleActionSelect('checkin')}
                   >
-                    <CardContent className="p-12 text-center">
-                      <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:bg-green-200 transition-colors">
-                        <Package className="h-12 w-12 text-green-600" />
+                    <CardContent className="p-12 h-full flex flex-col items-center justify-center text-center">
+                      <div className="w-28 h-28 md:w-32 md:h-32 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:bg-green-200 transition-colors">
+                        <Package className="h-14 w-14 md:h-16 md:w-16 text-green-600" />
                       </div>
-                      <h3 className="text-3xl font-bold text-gray-900 mb-4">Devolver Herramienta</h3>
+                      <h3 className="text-3xl font-bold text-gray-900 mb-4">DEVUELTO</h3>
                       <p className="text-xl text-gray-600">Registrar la devolución de herramientas</p>
                     </CardContent>
                   </Card>
@@ -729,7 +730,7 @@ export default function EntryExitPanel() {
                       <div className="text-center pb-4 border-b border-gray-200">
                         <span className="text-gray-600 text-lg block mb-2">Operación:</span>
                         <span className="font-bold text-2xl text-gray-900">
-                          {actionType === 'checkout' ? 'Coger Herramienta' : 'Devolver Herramienta'}
+                          {actionType === 'checkout' ? 'EN USO' : 'DEVUELTO'}
                         </span>
                       </div>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,12 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  // Borra caché/localStorage al abrir pantalla de login
+  useEffect(() => {
+    localStorage.removeItem('user');
+    sessionStorage.clear();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,13 +34,12 @@ export default function Login() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password: password.trim() })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        // Store user data in localStorage
         localStorage.setItem('user', JSON.stringify(data.user));
         // Redirect based on user role
         if (data.user.role === 'admin' || data.user.role === 'warehouse_manager') {
@@ -43,9 +48,11 @@ export default function Login() {
           navigate('/dashboard');
         }
       } else {
+        localStorage.removeItem('user');
         setError(data.error || 'Credenciales incorrectas');
       }
     } catch (error) {
+      localStorage.removeItem('user');
       setError('Error de conexión. Intenta de nuevo.');
     } finally {
       setLoading(false);
@@ -108,7 +115,7 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 pr-10 h-12 border-slate-300 focus:border-red-500 focus:ring-red-500"
-                    placeholder="••••••••••••••••"
+                    placeholder={"\u2022".repeat(16)}
                     style={{ borderColor: '#E2E8F0' }}
                   />
                   <button

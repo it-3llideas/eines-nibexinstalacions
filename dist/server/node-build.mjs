@@ -3,29 +3,116 @@ import { fileURLToPath } from "url";
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
-import crypto from "crypto";
+import { mysqlTable, timestamp, boolean, mysqlEnum, varchar, int, text, decimal, datetime } from "drizzle-orm/mysql-core";
+import { relations } from "drizzle-orm";
+import crypto from "node:crypto";
 const handleDemo = (req, res) => {
   const response = {
     message: "Hello from Express server"
   };
   res.status(200).json(response);
 };
-const connection$8 = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
+const operarios = mysqlTable("operarios", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).unique(),
+  role: mysqlEnum("role", ["operario", "supervisor", "warehouse_manager"]).default("operario"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
 });
+const toolCategories = mysqlTable("tool_categories", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  type: mysqlEnum("type", ["individual", "common"]).notNull(),
+  createdAt: timestamp("created_at").defaultNow()
+});
+const tools = mysqlTable("tools", {
+  id: int("id").primaryKey().autoincrement(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: mysqlEnum("type", ["individual", "common"]).notNull(),
+  categoryId: int("category_id"),
+  assignedTo: int("assigned_to"),
+  location: varchar("location", { length: 255 }).notNull(),
+  status: mysqlEnum("status", ["available", "in_use", "maintenance", "missing"]).default("available"),
+  lastSeen: datetime("last_seen"),
+  nextReview: datetime("next_review"),
+  cost: decimal("cost", { precision: 10, scale: 2 }),
+  serialNumber: varchar("serial_number", { length: 255 }),
+  qrCode: varchar("qr_code", { length: 255 }).unique(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+const toolCheckouts = mysqlTable("tool_checkouts", {
+  id: int("id").primaryKey().autoincrement(),
+  toolId: int("tool_id").notNull(),
+  operarioId: int("operario_id").notNull(),
+  checkedOutAt: datetime("checked_out_at").notNull(),
+  checkedInAt: datetime("checked_in_at"),
+  project: varchar("project", { length: 255 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow()
+});
+const operariosRelations = relations(operarios, ({ many }) => ({
+  assignedTools: many(tools),
+  checkouts: many(toolCheckouts)
+}));
+const toolCategoriesRelations = relations(toolCategories, ({ many }) => ({
+  tools: many(tools)
+}));
+const toolsRelations = relations(tools, ({ one, many }) => ({
+  category: one(toolCategories, {
+    fields: [tools.categoryId],
+    references: [toolCategories.id]
+  }),
+  assignedOperario: one(operarios, {
+    fields: [tools.assignedTo],
+    references: [operarios.id]
+  }),
+  checkouts: many(toolCheckouts)
+}));
+const toolCheckoutsRelations = relations(toolCheckouts, ({ one }) => ({
+  tool: one(tools, {
+    fields: [toolCheckouts.toolId],
+    references: [tools.id]
+  }),
+  operario: one(operarios, {
+    fields: [toolCheckouts.operarioId],
+    references: [operarios.id]
+  })
+}));
+const schema = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  operarios,
+  operariosRelations,
+  toolCategories,
+  toolCategoriesRelations,
+  toolCheckouts,
+  toolCheckoutsRelations,
+  tools,
+  toolsRelations
+}, Symbol.toStringTag, { value: "Module" }));
+const uri = process.env.DATABASE_URL;
+if (!uri) {
+  throw new Error("DATABASE_URL no configurada");
+}
+const connection = mysql.createPool({ uri, ssl: false });
+drizzle(connection, { schema, mode: "default" });
 const testConnection = async (req, res) => {
   try {
-    const [result] = await connection$8.execute("SELECT 1 as test");
-    const [tables] = await connection$8.execute("SHOW TABLES");
-    const [operarios] = await connection$8.execute("SELECT COUNT(*) as count FROM operarios");
+    const [result] = await connection.execute("SELECT 1 as test");
+    const [tables] = await connection.execute("SHOW TABLES");
+    const [operarios2] = await connection.execute("SELECT COUNT(*) as count FROM operarios");
     res.json({
       success: true,
       connection: "OK",
       testQuery: result,
       tables,
-      operariosCount: operarios
+      operariosCount: operarios2
     });
   } catch (error) {
     console.error("Database test failed:", error);
@@ -37,8 +124,8 @@ const testConnection = async (req, res) => {
 };
 const getSimpleOperarios = async (req, res) => {
   try {
-    const [operarios] = await connection$8.execute("SELECT * FROM operarios ORDER BY created_at DESC");
-    res.json(operarios);
+    const [operarios2] = await connection.execute("SELECT * FROM operarios ORDER BY created_at DESC");
+    res.json(operarios2);
   } catch (error) {
     console.error("Error fetching operarios:", error);
     res.status(500).json({
@@ -49,8 +136,8 @@ const getSimpleOperarios = async (req, res) => {
 };
 const getSimpleTools = async (req, res) => {
   try {
-    const [tools] = await connection$8.execute("SELECT * FROM tools_inventory ORDER BY id DESC LIMIT 20");
-    res.json(tools);
+    const [tools2] = await connection.execute("SELECT * FROM tools_inventory ORDER BY id DESC LIMIT 20");
+    res.json(tools2);
   } catch (error) {
     console.error("Error fetching tools:", error);
     res.status(500).json({
@@ -59,14 +146,10 @@ const getSimpleTools = async (req, res) => {
     });
   }
 };
-const connection$7 = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
-});
 const getTableStructure = async (req, res) => {
   try {
     const { table } = req.params;
-    const [columns] = await connection$7.execute(`DESCRIBE ${table}`);
+    const [columns] = await connection.execute(`DESCRIBE ${table}`);
     res.json(columns);
   } catch (error) {
     console.error("Error getting table structure:", error);
@@ -78,7 +161,7 @@ const getTableStructure = async (req, res) => {
 };
 const getAllTables = async (req, res) => {
   try {
-    const [tables] = await connection$7.execute("SHOW TABLES");
+    const [tables] = await connection.execute("SHOW TABLES");
     res.json(tables);
   } catch (error) {
     console.error("Error getting tables:", error);
@@ -88,13 +171,9 @@ const getAllTables = async (req, res) => {
     });
   }
 };
-const connection$6 = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
-});
 const getAllTools = async (req, res) => {
   try {
-    const [tools] = await connection$6.execute(`
+    const [tools2] = await connection.execute(`
       SELECT
         id,
         name,
@@ -116,7 +195,7 @@ const getAllTools = async (req, res) => {
     `);
     res.json({
       success: true,
-      tools
+      tools: tools2
     });
   } catch (error) {
     console.error("Error fetching tools inventory:", error);
@@ -128,7 +207,7 @@ const getAllTools = async (req, res) => {
 };
 const getAvailableTools = async (req, res) => {
   try {
-    const [tools] = await connection$6.execute(`
+    const [tools2] = await connection.execute(`
       SELECT
         id,
         name,
@@ -144,7 +223,7 @@ const getAvailableTools = async (req, res) => {
     `);
     res.json({
       success: true,
-      tools
+      tools: tools2
     });
   } catch (error) {
     console.error("Error fetching available tools:", error);
@@ -160,7 +239,7 @@ const authenticateOperario = async (req, res) => {
     if (!operarioCode) {
       return res.status(400).json({ error: "Código de operario requerido" });
     }
-    const [operario] = await connection$6.execute(
+    const [operario] = await connection.execute(
       "SELECT id, name, operario_code, role, active FROM operarios WHERE operario_code = ? AND active = TRUE",
       [operarioCode]
     );
@@ -185,7 +264,7 @@ const checkoutTool = async (req, res) => {
     if (!toolId || !operarioCode || !quantity) {
       return res.status(400).json({ error: "Faltan datos requeridos" });
     }
-    const [operario] = await connection$6.execute(
+    const [operario] = await connection.execute(
       "SELECT id, name FROM operarios WHERE operario_code = ? AND active = TRUE",
       [operarioCode]
     );
@@ -193,7 +272,7 @@ const checkoutTool = async (req, res) => {
       return res.status(401).json({ error: "Código de operario inválido" });
     }
     const operarioData = operario[0];
-    const [tool] = await connection$6.execute(
+    const [tool] = await connection.execute(
       "SELECT * FROM tools_inventory WHERE id = ?",
       [toolId]
     );
@@ -208,11 +287,11 @@ const checkoutTool = async (req, res) => {
     }
     const newAvailable = toolData.available_quantity - quantity;
     const newInUse = toolData.in_use_quantity + quantity;
-    await connection$6.execute(
+    await connection.execute(
       "UPDATE tools_inventory SET available_quantity = ?, in_use_quantity = ?, updated_at = NOW() WHERE id = ?",
       [newAvailable, newInUse, toolId]
     );
-    await connection$6.execute(
+    await connection.execute(
       "INSERT INTO tool_transactions (tool_id, operario_id, transaction_type, quantity, previous_available, new_available, project, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
       [toolId, operarioData.id, "checkout", quantity, toolData.available_quantity, newAvailable, project || null]
     );
@@ -238,7 +317,7 @@ const checkinTool = async (req, res) => {
     if (!toolId || !operarioCode || !quantity) {
       return res.status(400).json({ error: "Faltan datos requeridos" });
     }
-    const [operario] = await connection$6.execute(
+    const [operario] = await connection.execute(
       "SELECT id, name FROM operarios WHERE operario_code = ? AND active = TRUE",
       [operarioCode]
     );
@@ -246,7 +325,7 @@ const checkinTool = async (req, res) => {
       return res.status(401).json({ error: "Código de operario inválido" });
     }
     const operarioData = operario[0];
-    const [tool] = await connection$6.execute(
+    const [tool] = await connection.execute(
       "SELECT * FROM tools_inventory WHERE id = ?",
       [toolId]
     );
@@ -261,11 +340,11 @@ const checkinTool = async (req, res) => {
     }
     const newAvailable = toolData.available_quantity + quantity;
     const newInUse = toolData.in_use_quantity - quantity;
-    await connection$6.execute(
+    await connection.execute(
       "UPDATE tools_inventory SET available_quantity = ?, in_use_quantity = ?, updated_at = NOW() WHERE id = ?",
       [newAvailable, newInUse, toolId]
     );
-    await connection$6.execute(
+    await connection.execute(
       "INSERT INTO tool_transactions (tool_id, operario_id, transaction_type, quantity, previous_available, new_available, project, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
       [toolId, operarioData.id, "checkin", quantity, toolData.available_quantity, newAvailable, project || null]
     );
@@ -291,7 +370,7 @@ const addTool = async (req, res) => {
     if (!name || !category_id || !type || !total_quantity) {
       return res.status(400).json({ error: "Faltan datos requeridos" });
     }
-    await connection$6.execute(
+    await connection.execute(
       "INSERT INTO tools_inventory (name, description, category_id, type, total_quantity, available_quantity, in_use_quantity, maintenance_quantity, unit_cost, location, minimum_stock, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, NOW(), NOW())",
       [
         name,
@@ -321,13 +400,13 @@ const addTool = async (req, res) => {
 };
 const getInventoryStats = async (req, res) => {
   try {
-    const [totalTools] = await connection$6.execute("SELECT COUNT(*) as count FROM tools_inventory");
-    const [totalQuantity] = await connection$6.execute("SELECT SUM(total_quantity) as total FROM tools_inventory");
-    const [availableQuantity] = await connection$6.execute("SELECT SUM(available_quantity) as available FROM tools_inventory");
-    const [inUseQuantity] = await connection$6.execute("SELECT SUM(in_use_quantity) as inUse FROM tools_inventory");
-    const [maintenanceQuantity] = await connection$6.execute("SELECT SUM(maintenance_quantity) as maintenance FROM tools_inventory");
-    const [lowStockTools] = await connection$6.execute("SELECT COUNT(*) as count FROM tools_inventory WHERE available_quantity <= minimum_stock");
-    const [activeOperarios] = await connection$6.execute("SELECT COUNT(*) as count FROM operarios WHERE active = 1");
+    const [totalTools] = await connection.execute("SELECT COUNT(*) as count FROM tools_inventory");
+    const [totalQuantity] = await connection.execute("SELECT SUM(total_quantity) as total FROM tools_inventory");
+    const [availableQuantity] = await connection.execute("SELECT SUM(available_quantity) as available FROM tools_inventory");
+    const [inUseQuantity] = await connection.execute("SELECT SUM(in_use_quantity) as inUse FROM tools_inventory");
+    const [maintenanceQuantity] = await connection.execute("SELECT SUM(maintenance_quantity) as maintenance FROM tools_inventory");
+    const [lowStockTools] = await connection.execute("SELECT COUNT(*) as count FROM tools_inventory WHERE available_quantity <= minimum_stock");
+    const [activeOperarios] = await connection.execute("SELECT COUNT(*) as count FROM operarios WHERE active = 1");
     const stats = {
       totalToolTypes: totalTools[0].count,
       totalQuantity: totalQuantity[0].total || 0,
@@ -348,7 +427,7 @@ const getInventoryStats = async (req, res) => {
 };
 const getRecentTransactions = async (req, res) => {
   try {
-    const [transactions] = await connection$6.execute(`
+    const [transactions] = await connection.execute(`
       SELECT
         tt.id,
         tt.transaction_type,
@@ -358,10 +437,16 @@ const getRecentTransactions = async (req, res) => {
         tt.project,
         tt.created_at,
         ti.name as tool_name,
+        ti.location as tool_location,
+        ti.category_id as category_id,
+        tc.name as category_name,
+        tc.color as category_color,
+        tc.type as category_type,
         oi.name as operario_name,
         oi.email as operario_email
       FROM tool_transactions tt
       LEFT JOIN tools_inventory ti ON tt.tool_id = ti.id
+      LEFT JOIN tool_categories tc ON tc.id = ti.category_id
       LEFT JOIN operarios oi ON tt.operario_id = oi.id
       ORDER BY tt.created_at DESC
       LIMIT 20
@@ -372,6 +457,11 @@ const getRecentTransactions = async (req, res) => {
       tool: t.tool_name || "Unknown Tool",
       operario: t.operario_name || "Unknown Operario",
       operarioEmail: t.operario_email || "Sin email",
+      location: t.tool_location || null,
+      categoryId: t.category_id || null,
+      categoryName: t.category_name || null,
+      categoryColor: t.category_color || null,
+      categoryType: t.category_type || null,
       quantity: t.quantity,
       timestamp: formatTimestamp(t.created_at),
       project: t.project,
@@ -386,6 +476,40 @@ const getRecentTransactions = async (req, res) => {
     });
   }
 };
+const getTypeCounters = async (_req, res) => {
+  try {
+    const [inUseRows] = await connection.execute(
+      `SELECT type, COALESCE(SUM(in_use_quantity), 0) AS in_use
+       FROM tools_inventory
+       GROUP BY type`
+    );
+    const [returnedRows] = await connection.execute(
+      `SELECT ti.type AS type, COALESCE(SUM(tt.quantity), 0) AS returned
+       FROM tool_transactions tt
+       JOIN tools_inventory ti ON ti.id = tt.tool_id
+       WHERE tt.transaction_type = 'checkin'
+       GROUP BY ti.type`
+    );
+    const counters = {
+      individual: { inUse: 0, returned: 0 },
+      common: { inUse: 0, returned: 0 }
+    };
+    inUseRows.forEach((r) => {
+      if (r.type === "individual" || r.type === "common") {
+        counters[r.type].inUse = Number(r.in_use) || 0;
+      }
+    });
+    returnedRows.forEach((r) => {
+      if (r.type === "individual" || r.type === "common") {
+        counters[r.type].returned = Number(r.returned) || 0;
+      }
+    });
+    res.json({ success: true, counters });
+  } catch (error) {
+    console.error("Error fetching type counters:", error);
+    res.status(500).json({ error: "Error al obtener contadores por tipo", details: error.message });
+  }
+};
 const updateTool = async (req, res) => {
   try {
     const { id } = req.params;
@@ -393,7 +517,7 @@ const updateTool = async (req, res) => {
     if (!name || !category_id) {
       return res.status(400).json({ error: "Nombre y categoría son requeridos" });
     }
-    const [currentTool] = await connection$6.execute(
+    const [currentTool] = await connection.execute(
       "SELECT total_quantity, in_use_quantity, maintenance_quantity FROM tools_inventory WHERE id = ?",
       [id]
     );
@@ -407,7 +531,7 @@ const updateTool = async (req, res) => {
         error: "La cantidad total no puede ser menor que las herramientas en uso y mantenimiento"
       });
     }
-    await connection$6.execute(
+    await connection.execute(
       "UPDATE tools_inventory SET name = ?, description = ?, category_id = ?, total_quantity = ?, available_quantity = ?, unit_cost = ?, location = ?, minimum_stock = ?, notes = ?, updated_at = NOW() WHERE id = ?",
       [name, description || null, category_id, total_quantity, newAvailableQuantity, unit_cost || 0, location || "Almacén Central", minimum_stock || 1, notes || null, id]
     );
@@ -426,12 +550,12 @@ const updateTool = async (req, res) => {
 const deleteTool = async (req, res) => {
   try {
     const { id } = req.params;
-    const [transactions] = await connection$6.execute(
+    const [transactions] = await connection.execute(
       "SELECT COUNT(*) as count FROM tool_transactions WHERE tool_id = ?",
       [id]
     );
     const transactionCount = transactions[0].count;
-    const [tool] = await connection$6.execute(
+    const [tool] = await connection.execute(
       "SELECT name, in_use_quantity FROM tools_inventory WHERE id = ?",
       [id]
     );
@@ -445,7 +569,7 @@ const deleteTool = async (req, res) => {
       });
     }
     if (transactionCount > 0) {
-      await connection$6.execute(
+      await connection.execute(
         'UPDATE tools_inventory SET total_quantity = 0, available_quantity = 0, notes = CONCAT(COALESCE(notes, ""), " [ELIMINADA]"), updated_at = NOW() WHERE id = ?',
         [id]
       );
@@ -454,7 +578,7 @@ const deleteTool = async (req, res) => {
         message: `Herramienta ${toolData.name} marcada como eliminada (tiene historial de transacciones)`
       });
     } else {
-      await connection$6.execute("DELETE FROM tools_inventory WHERE id = ?", [id]);
+      await connection.execute("DELETE FROM tools_inventory WHERE id = ?", [id]);
       res.json({
         success: true,
         message: `Herramienta ${toolData.name} eliminada exitosamente`
@@ -482,87 +606,45 @@ function formatTimestamp(date) {
   if (diffInDays < 7) return `Hace ${diffInDays} día${diffInDays > 1 ? "s" : ""}`;
   return dateObj.toLocaleDateString("es-ES");
 }
-const SECRET = "NjAFELjMxFZRngffrSylau0suRtRZ/fIMdmB6UQ6Ie8=";
-function encryptPassword(password) {
-  const hmac = crypto.createHmac("sha256", SECRET);
+const SECRET = process.env.NEXT_AUTH_SECRET || "NjAFELjMxFZRngffrSylau0suRtRZ/fIMdmB6UQ6Ie8=";
+const LEGACY_SECRET = "NjAFELjMxFZRngffrSylau0suRtRZ/fIMdmB6UQ6Ie8=";
+function encryptPassword(password, secret = SECRET) {
+  const hmac = crypto.createHmac("sha256", secret);
   hmac.update(password);
   return hmac.digest("hex");
 }
 function verifyPassword(password, encryptedPassword) {
-  const encrypted = encryptPassword(password);
-  return encrypted === encryptedPassword;
+  if (encryptPassword(password, SECRET) === encryptedPassword) return true;
+  if (encryptPassword(password, LEGACY_SECRET) === encryptedPassword) return true;
+  return false;
 }
-const connection$5 = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
-});
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: "Email y contraseña son requeridos" });
     }
-    const [adminUsers] = await connection$5.execute(
+    const [rows] = await connection.execute(
       "SELECT id, username, email, password_hash, active FROM users WHERE email = ? AND active = TRUE",
       [email]
     );
-    if (adminUsers.length > 0) {
-      const user = adminUsers[0];
-      const isValidPassword = verifyPassword(password, user.password_hash);
-      if (isValidPassword) {
-        res.json({
-          success: true,
-          user: {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            role: "admin"
-            // All admin users are administrators
-          }
-        });
-        return;
+    if (rows.length === 0) {
+      return res.status(401).json({ error: "Credenciales incorrectas" });
+    }
+    const user = rows[0];
+    const isValid = verifyPassword(password, user.password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: "Credenciales incorrectas" });
+    }
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: "admin"
       }
-    }
-    const [regularUsers] = await connection$5.execute(
-      'SELECT id, name, email, password, role, status FROM users WHERE email = ? AND status = "ACTIVE"',
-      [email]
-    );
-    if (regularUsers.length > 0) {
-      const user = regularUsers[0];
-      const isValidPassword = verifyPassword(password, user.password);
-      if (isValidPassword) {
-        res.json({
-          success: true,
-          user: {
-            id: user.id,
-            username: user.name,
-            email: user.email,
-            role: "admin"
-            // All users are administrators
-          }
-        });
-        return;
-      }
-    }
-    const [operarios] = await connection$5.execute(
-      "SELECT id, name, email, operario_code, active FROM operarios WHERE operario_code = ? AND active = TRUE",
-      [password]
-      // Use password field as operario_code
-    );
-    if (operarios.length > 0) {
-      const operario = operarios[0];
-      res.json({
-        success: true,
-        user: {
-          id: operario.id,
-          username: operario.name,
-          email: operario.email || `operario${operario.id}@nibex.com`,
-          role: "operario"
-        }
-      });
-      return;
-    }
-    res.status(401).json({ error: "Credenciales incorrectas" });
+    });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Error interno del servidor" });
@@ -571,7 +653,7 @@ const loginUser = async (req, res) => {
 const getCurrentUser = async (req, res) => {
   try {
     const { userId } = req.params;
-    const [users] = await connection$5.execute(
+    const [users] = await connection.execute(
       "SELECT id, username, email, active FROM users WHERE id = ? AND active = TRUE",
       [userId]
     );
@@ -596,13 +678,9 @@ const getCurrentUser = async (req, res) => {
 const logoutUser = async (req, res) => {
   res.json({ success: true, message: "Sesión cerrada correctamente" });
 };
-const connection$4 = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
-});
 const getAllCategories = async (req, res) => {
   try {
-    const [categories] = await connection$4.execute(`
+    const [categories] = await connection.execute(`
       SELECT 
         id,
         name,
@@ -628,7 +706,7 @@ const getAllCategories = async (req, res) => {
 const getCategoriesByType = async (req, res) => {
   try {
     const { type } = req.params;
-    const [categories] = await connection$4.execute(`
+    const [categories] = await connection.execute(`
       SELECT 
         id,
         name,
@@ -660,14 +738,14 @@ const createCategory = async (req, res) => {
     if (!["individual", "common"].includes(type)) {
       return res.status(400).json({ error: 'Tipo debe ser "individual" o "common"' });
     }
-    const [existing] = await connection$4.execute(
+    const [existing] = await connection.execute(
       "SELECT id FROM tool_categories WHERE name = ? AND type = ? AND active = TRUE",
       [name, type]
     );
     if (existing.length > 0) {
       return res.status(400).json({ error: "Ya existe una categoría con este nombre para este tipo" });
     }
-    const [result] = await connection$4.execute(
+    const [result] = await connection.execute(
       "INSERT INTO tool_categories (name, description, type, color, active, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
       [name, description || null, type, color || "#E2372B", true]
     );
@@ -694,21 +772,21 @@ const updateCategory = async (req, res) => {
     if (!["individual", "common"].includes(type)) {
       return res.status(400).json({ error: 'Tipo debe ser "individual" o "common"' });
     }
-    const [existing] = await connection$4.execute(
+    const [existing] = await connection.execute(
       "SELECT id FROM tool_categories WHERE id = ?",
       [id]
     );
     if (existing.length === 0) {
       return res.status(404).json({ error: "Categoría no encontrada" });
     }
-    const [duplicate] = await connection$4.execute(
+    const [duplicate] = await connection.execute(
       "SELECT id FROM tool_categories WHERE name = ? AND type = ? AND active = TRUE AND id != ?",
       [name, type, id]
     );
     if (duplicate.length > 0) {
       return res.status(400).json({ error: "Ya existe otra categoría con este nombre para este tipo" });
     }
-    await connection$4.execute(
+    await connection.execute(
       "UPDATE tool_categories SET name = ?, description = ?, type = ?, color = ?, active = ?, updated_at = NOW() WHERE id = ?",
       [name, description || null, type, color || "#E2372B", active !== void 0 ? active : true, id]
     );
@@ -727,7 +805,7 @@ const updateCategory = async (req, res) => {
 const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const [existing] = await connection$4.execute(
+    const [existing] = await connection.execute(
       "SELECT name FROM tool_categories WHERE id = ? AND active = TRUE",
       [id]
     );
@@ -735,17 +813,17 @@ const deleteCategory = async (req, res) => {
       return res.status(404).json({ error: "Categoría no encontrada" });
     }
     const categoryName = existing[0].name;
-    const [tools] = await connection$4.execute(
+    const [tools2] = await connection.execute(
       "SELECT COUNT(*) as count FROM tools_inventory WHERE category_id = ?",
       [id]
     );
-    const toolCount = tools[0].count;
+    const toolCount = tools2[0].count;
     if (toolCount > 0) {
       return res.status(400).json({
         error: `No se puede eliminar la categoría "${categoryName}" porque tiene ${toolCount} herramienta(s) asignada(s)`
       });
     }
-    await connection$4.execute(
+    await connection.execute(
       "UPDATE tool_categories SET active = FALSE, updated_at = NOW() WHERE id = ?",
       [id]
     );
@@ -763,7 +841,7 @@ const deleteCategory = async (req, res) => {
 };
 const getCategoryStats = async (req, res) => {
   try {
-    const [stats] = await connection$4.execute(`
+    const [stats] = await connection.execute(`
       SELECT 
         tc.id,
         tc.name,
@@ -788,21 +866,17 @@ const getCategoryStats = async (req, res) => {
     });
   }
 };
-const connection$3 = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
-});
 const checkAndCreateAdmin = async (req, res) => {
   try {
     console.log("🔍 Verificando usuario administrador...");
-    const [tables] = await connection$3.execute(`
+    const [tables] = await connection.execute(`
       SELECT TABLE_NAME 
       FROM INFORMATION_SCHEMA.TABLES 
       WHERE TABLE_SCHEMA = 'nibex' AND TABLE_NAME = 'users'
     `);
     if (tables.length === 0) {
       console.log("❌ Tabla users no existe. Creándola...");
-      await connection$3.execute(`
+      await connection.execute(`
         CREATE TABLE users (
           id INT PRIMARY KEY AUTO_INCREMENT,
           username VARCHAR(100) UNIQUE NOT NULL,
@@ -815,16 +889,17 @@ const checkAndCreateAdmin = async (req, res) => {
       `);
       console.log("✅ Tabla users creada");
     }
-    const [existingAdmin] = await connection$3.execute(
-      "SELECT id, email, username FROM users WHERE email = ?",
+    const [existingAdmin] = await connection.execute(
+      "SELECT id, email, username, password_hash FROM users WHERE email = ?",
       ["admin@nibexinstalacions.com"]
     );
     if (existingAdmin.length === 0) {
       console.log("❌ Usuario administrador no existe. Creándolo...");
-      await connection$3.execute(`
+      const hashedPassword = encryptPassword("C@t4luny4");
+      await connection.execute(`
         INSERT INTO users (username, email, password_hash, active) VALUES
-        ('admin', 'admin@nibexinstalacions.com', 'C@t4luny4', TRUE)
-      `);
+        ('admin', 'admin@nibexinstalacions.com', ?, TRUE)
+      `, [hashedPassword]);
       console.log("✅ Usuario administrador creado");
       console.log("   Email: admin@nibexinstalacions.com");
       console.log("   Password: C@t4luny4");
@@ -840,6 +915,14 @@ const checkAndCreateAdmin = async (req, res) => {
     } else {
       console.log("✅ Usuario administrador ya existe");
       const admin = existingAdmin[0];
+      if (!admin.password_hash || admin.password_hash.length !== 64 || !/^[0-9a-f]+$/i.test(admin.password_hash)) {
+        const newHash = encryptPassword(String(admin.password_hash || "C@t4luny4"));
+        await connection.execute(
+          "UPDATE users SET password_hash = ? WHERE id = ?",
+          [newHash, admin.id]
+        );
+        admin.password_hash = newHash;
+      }
       res.json({
         success: true,
         message: "Usuario administrador ya existe",
@@ -858,11 +941,33 @@ const checkAndCreateAdmin = async (req, res) => {
     });
   }
 };
+const ensureAdminHash = async (_req, res) => {
+  try {
+    const [rows] = await connection.execute(
+      "SELECT id, email, password_hash FROM users WHERE email = ? LIMIT 1",
+      ["admin@nibexinstalacions.com"]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Admin no existe" });
+    }
+    const admin = rows[0];
+    const looksHashed = typeof admin.password_hash === "string" && /^[0-9a-f]{64}$/i.test(admin.password_hash);
+    if (!looksHashed) {
+      const newHash = encryptPassword("C@t4luny4");
+      await connection.execute("UPDATE users SET password_hash = ? WHERE id = ?", [newHash, admin.id]);
+      return res.json({ success: true, updated: true });
+    }
+    return res.json({ success: true, updated: false });
+  } catch (e) {
+    console.error("ensureAdminHash error:", e);
+    return res.status(500).json({ success: false, error: e.message });
+  }
+};
 const testLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
     console.log("🔐 Testing login for:", email);
-    const [users] = await connection$3.execute(
+    const [users] = await connection.execute(
       "SELECT id, username, email, password_hash, active FROM users WHERE email = ? AND active = TRUE",
       [email]
     );
@@ -903,13 +1008,9 @@ const testLogin = async (req, res) => {
     });
   }
 };
-const connection$2 = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
-});
 const getAllUsers = async (req, res) => {
   try {
-    const [users] = await connection$2.execute(`
+    const [users] = await connection.execute(`
       SELECT id, username, email,
              CASE WHEN active = 1 THEN 'ACTIVE' ELSE 'INACTIVE' END as active,
              created_at
@@ -937,7 +1038,7 @@ const createUser = async (req, res) => {
         error: "Nombre de usuario y contraseña son requeridos"
       });
     }
-    const [existingUsername] = await connection$2.execute(
+    const [existingUsername] = await connection.execute(
       "SELECT id FROM users WHERE username = ?",
       [username]
     );
@@ -948,7 +1049,7 @@ const createUser = async (req, res) => {
       });
     }
     if (email) {
-      const [existingEmail] = await connection$2.execute(
+      const [existingEmail] = await connection.execute(
         "SELECT id FROM users WHERE email = ?",
         [email]
       );
@@ -960,7 +1061,7 @@ const createUser = async (req, res) => {
       }
     }
     const hashedPassword = encryptPassword(password);
-    const [result] = await connection$2.execute(
+    const [result] = await connection.execute(
       "INSERT INTO users (username, email, password_hash, active) VALUES (?, ?, ?, TRUE)",
       [username, email, hashedPassword]
     );
@@ -987,7 +1088,7 @@ const updateUser = async (req, res) => {
         error: "Nombre de usuario es requerido"
       });
     }
-    const [existingUser] = await connection$2.execute(
+    const [existingUser] = await connection.execute(
       "SELECT id, username FROM users WHERE id = ?",
       [id]
     );
@@ -997,7 +1098,7 @@ const updateUser = async (req, res) => {
         error: "Usuario no encontrado"
       });
     }
-    const [usernameCheck] = await connection$2.execute(
+    const [usernameCheck] = await connection.execute(
       "SELECT id FROM users WHERE username = ? AND id != ?",
       [username, id]
     );
@@ -1008,7 +1109,7 @@ const updateUser = async (req, res) => {
       });
     }
     if (email) {
-      const [emailCheck] = await connection$2.execute(
+      const [emailCheck] = await connection.execute(
         "SELECT id FROM users WHERE email = ? AND id != ?",
         [email, id]
       );
@@ -1028,7 +1129,7 @@ const updateUser = async (req, res) => {
     }
     updateQuery += " WHERE id = ?";
     updateParams.push(id);
-    await connection$2.execute(updateQuery, updateParams);
+    await connection.execute(updateQuery, updateParams);
     res.json({
       success: true,
       message: "Usuario actualizado exitosamente"
@@ -1044,7 +1145,7 @@ const updateUser = async (req, res) => {
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const [existingUser] = await connection$2.execute(
+    const [existingUser] = await connection.execute(
       "SELECT id, username FROM users WHERE id = ?",
       [id]
     );
@@ -1061,7 +1162,7 @@ const deleteUser = async (req, res) => {
         error: "No se puede eliminar el usuario administrador principal"
       });
     }
-    await connection$2.execute("DELETE FROM users WHERE id = ?", [id]);
+    await connection.execute("DELETE FROM users WHERE id = ?", [id]);
     res.json({
       success: true,
       message: "Usuario eliminado exitosamente"
@@ -1074,18 +1175,14 @@ const deleteUser = async (req, res) => {
     });
   }
 };
-const connection$1 = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
-});
 const getOperarios = async (req, res) => {
   try {
-    const [operarios] = await connection$1.execute(
+    const [operarios2] = await connection.execute(
       "SELECT id, name, email, operario_code, active, created_at FROM operarios ORDER BY created_at DESC"
     );
     res.json({
       success: true,
-      operarios
+      operarios: operarios2
     });
   } catch (error) {
     console.error("Error getting operarios:", error);
@@ -1102,7 +1199,7 @@ const createOperario = async (req, res) => {
     let operarioCode = generateCode();
     let codeExists = true;
     while (codeExists) {
-      const [existing] = await connection$1.execute(
+      const [existing] = await connection.execute(
         "SELECT COUNT(*) as count FROM operarios WHERE operario_code = ?",
         [operarioCode]
       );
@@ -1112,7 +1209,7 @@ const createOperario = async (req, res) => {
         operarioCode = generateCode();
       }
     }
-    await connection$1.execute(
+    await connection.execute(
       "INSERT INTO operarios (name, email, operario_code, active) VALUES (?, ?, ?, TRUE)",
       [name, email || null, operarioCode]
     );
@@ -1141,7 +1238,7 @@ const updateOperario = async (req, res) => {
     if (!name) {
       return res.status(400).json({ error: "El nombre es requerido" });
     }
-    await connection$1.execute(
+    await connection.execute(
       "UPDATE operarios SET name = ?, email = ?, active = ? WHERE id = ?",
       [name, email || null, active !== false, id]
     );
@@ -1161,12 +1258,12 @@ const updateOperario = async (req, res) => {
 const deleteOperario = async (req, res) => {
   try {
     const { id } = req.params;
-    const [transactions] = await connection$1.execute(
+    const [transactions] = await connection.execute(
       "SELECT COUNT(*) as count FROM tool_transactions WHERE operario_id = ?",
       [id]
     );
     if (transactions[0].count > 0) {
-      await connection$1.execute(
+      await connection.execute(
         "UPDATE operarios SET active = FALSE WHERE id = ?",
         [id]
       );
@@ -1175,7 +1272,7 @@ const deleteOperario = async (req, res) => {
         message: "Operario desactivado exitosamente (tiene historial de transacciones)"
       });
     } else {
-      await connection$1.execute(
+      await connection.execute(
         "DELETE FROM operarios WHERE id = ?",
         [id]
       );
@@ -1196,7 +1293,7 @@ const regenerateCode = async (req, res) => {
     let operarioCode = generateCode();
     let codeExists = true;
     while (codeExists) {
-      const [existing] = await connection$1.execute(
+      const [existing] = await connection.execute(
         "SELECT COUNT(*) as count FROM operarios WHERE operario_code = ? AND id != ?",
         [operarioCode, id]
       );
@@ -1206,7 +1303,7 @@ const regenerateCode = async (req, res) => {
         operarioCode = generateCode();
       }
     }
-    await connection$1.execute(
+    await connection.execute(
       "UPDATE operarios SET operario_code = ? WHERE id = ?",
       [operarioCode, id]
     );
@@ -1220,21 +1317,17 @@ const regenerateCode = async (req, res) => {
     res.status(500).json({ error: "Error interno del servidor" });
   }
 };
-const connection = mysql.createPool({
-  uri: process.env.DATABASE_URL || "mysql://nibex:nibex@212.83.137.117:3306/nibex",
-  ssl: false
-});
 const fixInventoryQuantities = async (req, res) => {
   try {
     const { toolId } = req.params;
-    const [tools] = await connection.execute(
+    const [tools2] = await connection.execute(
       "SELECT * FROM tools_inventory WHERE id = ?",
       [toolId]
     );
-    if (tools.length === 0) {
+    if (tools2.length === 0) {
       return res.status(404).json({ error: "Herramienta no encontrada" });
     }
-    const tool = tools[0];
+    const tool = tools2[0];
     const [transactions] = await connection.execute(`
       SELECT 
         transaction_type,
@@ -1283,12 +1376,110 @@ const fixInventoryQuantities = async (req, res) => {
     });
   }
 };
+async function tableExists(table) {
+  const [rows] = await connection.execute(
+    `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    [table]
+  );
+  return rows.length > 0;
+}
+const setupDatabase = async (_req, res) => {
+  try {
+    const created = [];
+    if (!await tableExists("users")) {
+      await connection.execute(`
+        CREATE TABLE users (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          username VARCHAR(100) UNIQUE NOT NULL,
+          email VARCHAR(255) UNIQUE,
+          password_hash VARCHAR(255) NOT NULL,
+          active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      created.push("users");
+    }
+    if (!await tableExists("operarios")) {
+      await connection.execute(`
+        CREATE TABLE operarios (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE,
+          operario_code VARCHAR(20) UNIQUE NOT NULL,
+          active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      created.push("operarios");
+    }
+    if (!await tableExists("tool_categories")) {
+      await connection.execute(`
+        CREATE TABLE tool_categories (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          type ENUM('individual','common') NOT NULL,
+          color VARCHAR(7) DEFAULT '#E2372B',
+          active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      created.push("tool_categories");
+    }
+    if (!await tableExists("tools_inventory")) {
+      await connection.execute(`
+        CREATE TABLE tools_inventory (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          category_id INT,
+          type ENUM('individual','common') NOT NULL,
+          total_quantity INT NOT NULL DEFAULT 0,
+          available_quantity INT NOT NULL DEFAULT 0,
+          in_use_quantity INT NOT NULL DEFAULT 0,
+          maintenance_quantity INT NOT NULL DEFAULT 0,
+          unit_cost DECIMAL(10,2),
+          location VARCHAR(255) DEFAULT 'Almacén Central',
+          minimum_stock INT DEFAULT 1,
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      created.push("tools_inventory");
+    }
+    if (!await tableExists("tool_transactions")) {
+      await connection.execute(`
+        CREATE TABLE tool_transactions (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          tool_id INT NOT NULL,
+          operario_id INT NOT NULL,
+          transaction_type ENUM('checkout','checkin','maintenance','add_stock','remove_stock') NOT NULL,
+          quantity INT NOT NULL,
+          previous_available INT NOT NULL,
+          new_available INT NOT NULL,
+          project VARCHAR(255),
+          destination VARCHAR(255),
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      created.push("tool_transactions");
+    }
+    res.json({ success: true, created });
+  } catch (err) {
+    console.error("DB setup error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
 function createServer() {
   const app2 = express();
   app2.use(cors());
   app2.use(express.json());
   app2.use(express.urlencoded({ extended: true }));
-  fetch("http://localhost:8080/api/admin/setup").then((response) => response.json()).then((data) => console.log("Admin setup result:", data.message)).catch((error) => console.log("Admin setup will be available via API"));
   app2.get("/api/ping", (_req, res) => {
     const ping = process.env.PING_MESSAGE ?? "ping";
     res.json({ message: ping });
@@ -1304,6 +1495,10 @@ function createServer() {
   app2.post("/api/auth/logout", logoutUser);
   app2.get("/api/admin/setup", checkAndCreateAdmin);
   app2.post("/api/admin/test-login", testLogin);
+  app2.post("/api/admin/ensure-admin-hash", ensureAdminHash);
+  app2.get("/api/admin/ensure-admin-hash", ensureAdminHash);
+  app2.post("/api/db/setup", setupDatabase);
+  app2.get("/api/db/setup", setupDatabase);
   app2.get("/api/operarios", getOperarios);
   app2.post("/api/operarios", createOperario);
   app2.put("/api/operarios/:id", updateOperario);
@@ -1329,6 +1524,7 @@ function createServer() {
   app2.delete("/api/inventory/tools/:id", deleteTool);
   app2.get("/api/inventory/stats", getInventoryStats);
   app2.get("/api/inventory/transactions", getRecentTransactions);
+  app2.get("/api/inventory/type-counters", getTypeCounters);
   app2.post("/api/inventory/fix/:toolId", fixInventoryQuantities);
   return app2;
 }
